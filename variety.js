@@ -118,6 +118,7 @@ var addTypeToArray = function(arr, value) {
   if(!found) {
     arr.push(t);
   }
+  return arr;
 }
 
 var addRecordResult = function(key, value, result) {
@@ -126,15 +127,18 @@ var addRecordResult = function(key, value, result) {
     result[key] = {"_id":{"key":key},"value": {"type": varietyTypeOf(value)}, totalOccurrences:1};
   } else {
     var type = varietyTypeOf(value);
-    if(cur.value.type != type) {
+    if(cur.value.types) {
+      cur.value.types = addTypeToArray(cur.value.types, value);
+    } else if(cur.value.type != type) {
       cur.value.types = [cur.value.type];
       delete cur.value["type"];
-      addTypeToArray(cur.value.types, type);
+      addTypeToArray(cur.value.types, value);
     } else if(!cur.value.type) {
-      addTypeToArray(cur.value.types, type);
+      cur.value.types = addTypeToArray(cur.value.types, value);
     }
     result[key] = cur;
   }
+  return result;
 }
 
 var mapRecursive = function(parentKey, obj, level, result) {
@@ -142,12 +146,13 @@ var mapRecursive = function(parentKey, obj, level, result) {
     if(obj.hasOwnProperty(key)) {
       var value = obj[key];
       key = (parentKey + "." + key).replace(/\.\d+/g,'.XX');
-      addRecordResult(key, value, result);
+      result = addRecordResult(key, value, result);
       if (level < maxDepth - 1 && varietyCanHaveChildren(value)) {
-        mapRecursive(key, value, level + 1, result);
+        result = mapRecursive(key, value, level + 1, result);
       }
     }
   }
+  return result;
 }
 
 // store results here (no map reduce limit!)
@@ -168,9 +173,9 @@ var addVarietyResults = function(result) {
             if(cur.value.type != type) {
               cur.value.types = [cur.value.type];
               delete cur.value["type"];
-              addTypeToArray(cur.value.types, type);
+              cur.value.types = addTypeToArray(cur.value.types, value);
             } else if(!cur.value.type) {
-              addTypeToArray(cur.value.types, type);
+              cur.value.types = addTypeToArray(cur.value.types, value);
             }
           }
         }
@@ -182,14 +187,14 @@ var addVarietyResults = function(result) {
 }
 
 // main cursor
-db[collection].find().sort({_id: -1}).limit(limit).forEach(function(obj) {
   var recordResult = {};
+db[collection].find().sort({_id: -1}).limit(limit).forEach(function(obj) {
   for (var key in obj) {
     if(obj.hasOwnProperty(key)) {
       var value = obj[key];
-      addRecordResult(key, value, recordResult);
+      recordResult = addRecordResult(key, value, recordResult);
       if (maxDepth > 1 && varietyCanHaveChildren(value)) {
-        mapRecursive(key, value, 1, recordResult);
+        recordResult = mapRecursive(key, value, 1, recordResult);
       }
     }
   }
@@ -239,3 +244,4 @@ var sortedKeys = resultsDB[resultsCollectionName].find({}).sort({totalOccurrence
 sortedKeys.forEach(function(key) {
   print(tojson(key, '', true));
 });
+
